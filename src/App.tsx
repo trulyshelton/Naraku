@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import './App.css';
 import Amplify from 'aws-amplify';
+import Fuse from 'fuse.js';
 import {
     BrowserRouter as Router,
     Switch,
@@ -15,20 +16,32 @@ import awsconfig from './aws-config';
 
 Amplify.configure(awsconfig);
 
+let allFiles = [];
+let fuse;
+
 class App extends React.Component<any, any> {
-    state = {
-        files: [],
-    };
+    constructor(props) {
+        super(props);
+        this.state = { files: [], };
+        this.setFiles = this.setFiles.bind(this)
+    }
+
+    setFiles(files) {
+        this.setState({files:files});
+    }
 
     componentDidMount() {
       ListFiles().then(files => {
-          console.log(files)
-          this.setState({files})
+          allFiles = files;
+          this.setState({files:allFiles});
+          fuse = new Fuse(allFiles, {keys: [], threshold: 0.4, ignoreLocation: true, useExtendedSearch: true})
+          console.log(allFiles);
       });
     }
 
+
+
     render() {
-        const files = this.state.files;
         return (
             <Router>
                 <div>
@@ -37,10 +50,11 @@ class App extends React.Component<any, any> {
                             <File />
                         </Route>
                         <Route path="/">
+                            <SearchBar setFiles={this.setFiles}/>
                             <ul>
-                                {files.map(item => (
-                                    <li>
-                                        <Link to={`/${encodeURI(item['Key'])}`}>{item['Key']}</Link>
+                                {this.state.files.map(item => (
+                                    <li key={item}>
+                                        <Link to={`/${encodeURI(item)}`}>{item}</Link>
                                     </li>
                                 ))}
                             </ul>
@@ -56,13 +70,25 @@ function File() {
     let { fileKey } = useParams();
     const [url, updateUrl] = useState();
     useEffect(() => {
-        const getData = async () => {
-            let result = await GetSignedUrl(fileKey);
-            updateUrl(result.presignedUrl);
-        }
-        getData();
+        GetSignedUrl(fileKey).then(res => updateUrl(res.presignedUrl));
     });
     return <>{url &&  <video src={`${url}`} controls={true} autoPlay={true} />}</>;
+}
+
+function SearchBar({setFiles}) {
+    const handleChange = (e) => {
+        e.preventDefault();
+        if (e.target.value.length > 0) {
+            setFiles(fuse.search(e.target.value).map(x => x.item));
+        }
+    };
+
+    return <div>
+        <input
+            type="search"
+            placeholder="Search here"
+            onChange={handleChange} />
+    </div>
 }
 
 export default withAuth(App);

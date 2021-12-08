@@ -39,7 +39,7 @@ export function withAuth<T extends object>(Component: ComponentType<T>) {
             } catch (err) {
                 logger.debug(err);
             }
-        };
+        }
 
         if (!signedIn) {
             return (
