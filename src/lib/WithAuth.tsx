@@ -51,14 +51,11 @@ export function withAuth<T extends object>(Component: ComponentType<T>) {
                     </AmplifyAuthContainer>
                 </AmplifyContainer>
             );
-        }
-
-        return (
-            <>
-                <AmplifySignOut />
+        } else {
+            return (
                 <Component {...props} />
-            </>
-        );
+            );
+        }
     };
 
     return AppWithAuthenticator;
