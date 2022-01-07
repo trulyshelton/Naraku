@@ -10,18 +10,18 @@ import {
     useParams
 } from "react-router-dom";
 import { withAuth } from './lib/WithAuth';
-import { ListFiles, GetSignedUrl } from './lib/BB2';
+import { PaginateListFiles, GetSignedUrl, GetConfigAndInit } from './lib/BB2';
 import awsconfig from './aws-config';
 
 Amplify.configure(awsconfig);
 
-let allFiles = JSON.parse(localStorage.getItem("allFiles") || '[]');
-let fuse;
+let allFiles : string[] = JSON.parse(localStorage.getItem("allFiles") || '[]');
+let fuse = new Fuse(allFiles, {keys: [], threshold: 0.4, ignoreLocation: true, useExtendedSearch: true});
 
 class App extends React.Component<any, any> {
     constructor(props) {
         super(props);
-        this.state = { files: allFiles, };
+        this.state = {files: allFiles};
         this.setFiles = this.setFiles.bind(this)
     }
 
@@ -30,13 +30,26 @@ class App extends React.Component<any, any> {
     }
 
     componentDidMount() {
-      ListFiles().then(files => {
-          allFiles = files;
-          localStorage.setItem("allFiles", JSON.stringify(allFiles))
-          this.setFiles(allFiles);
-          fuse = new Fuse(allFiles, {keys: [], threshold: 0.4, ignoreLocation: true, useExtendedSearch: true})
-          console.log("Load all files complete.");
-      });
+        GetConfigAndInit().then(() => {
+            let localAllFiles : string[] = [];
+            PaginateListFiles("").then(async paginator => {
+                for await (const data of paginator) {
+                    localAllFiles.push(...(data.Contents!.map(x => x.Key as string) ?? []));
+                }
+                allFiles = localAllFiles;
+                this.setFiles(allFiles);
+                fuse = new Fuse(allFiles, {keys: [], threshold: 0.4, ignoreLocation: true, useExtendedSearch: true})
+                localStorage.setItem("allFiles", JSON.stringify(allFiles))
+                console.log("Load all files complete.");
+                this.setState({...this.state, loaded: true});
+            }).catch(err => {
+                console.error(err);
+                this.setState({error: err});
+            });
+        }).catch(err => {
+            console.error(err);
+            this.setState({error: err});
+        })
     }
 
 
@@ -49,7 +62,7 @@ class App extends React.Component<any, any> {
                             <File />
                         </Route>
                         <Route path="/:path*">
-                            <SearchBar setFiles={this.setFiles}/>
+                            <SearchBar setFiles={this.setFiles} state={this.state}/>
                             <Explorer state={this.state}/>
                         </Route>
                     </Switch>
@@ -61,10 +74,10 @@ class App extends React.Component<any, any> {
 
 function Explorer({state}) {
     let { path } = useParams();
-    console.log(`Exploring path ${path}.`);
 
     let root = path === undefined ? "" : "/";
     path = path || "";
+    console.log(`Exploring path ${path}`);
 
     let folderSet = new Set(), topLevelFiles: string[] = [];
     for (let i = 0; i < state.files.length; i++) {
@@ -102,15 +115,15 @@ function Explorer({state}) {
 
 function File() {
     let { fileKey } = useParams();
-    const [url, updateUrl] = useState();
-    useEffect(() => {GetSignedUrl(fileKey).then(res => updateUrl(res.presignedUrl));});
+    const [url, updateUrl] = useState("");
+    useEffect(() => {GetSignedUrl(fileKey as string).then(res => updateUrl(res));});
     return <div>
-        <p style={{textAlign:"center"}}>{fileKey.split("/").pop()}</p>
+        <p style={{textAlign:"center"}}>{(fileKey as string).split("/").pop()}</p>
         {url &&  <video className={"center"} src={`${url}`} controls={true} autoPlay={true} />}
     </div>;
 }
 
-function SearchBar({setFiles}) {
+function SearchBar({setFiles, state}) {
     const handleChange = (e) => {
         e.preventDefault();
         if (e.target.value.length > 0) {
@@ -120,10 +133,13 @@ function SearchBar({setFiles}) {
         }
     };
 
+    let placeholderText = "Loading...";
+    if (state.loaded) placeholderText = "Search here";
+    if (state.error) placeholderText = state.error.toString();
     return <div>
         <textarea
             className={"center"}
-            placeholder="Search here"
+            placeholder={placeholderText}
             onChange={handleChange} />
     </div>
 }
