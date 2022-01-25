@@ -10,7 +10,7 @@ import {
     useParams
 } from "react-router-dom";
 import { withAuth } from './lib/WithAuth';
-import { PaginateListFiles, GetSignedUrl, GetConfigAndInit } from './lib/BB2';
+import {PaginateListFiles, GetSignedUrl, GetConfigAndInit, DeleteFile} from './lib/BB2';
 import awsconfig from './aws-config';
 
 Amplify.configure(awsconfig);
@@ -116,9 +116,21 @@ function Explorer({state}) {
 function File() {
     let { fileKey } = useParams();
     const [url, updateUrl] = useState("");
-    useEffect(() => {GetSignedUrl(fileKey as string).then(res => updateUrl(res));});
+    useEffect(() => {GetSignedUrl(fileKey).then(res => updateUrl(res));});
+    let deleteOnClick = () => {
+        let confirm = window.confirm(`Are you sure to delete file ${fileKey}?`);
+        if (confirm) {
+            DeleteFile(fileKey)
+                .then(() => {
+                    alert(`deleted ${fileKey}`);
+                // ToDo: reload allFiles
+                })
+                .catch(alert);
+        }
+    }
     return <div>
-        <p style={{textAlign:"center"}}>{(fileKey as string).split("/").pop()}</p>
+        <p style={{textAlign:"center"}}>{(fileKey).split("/").pop()} <span onClick={deleteOnClick}>❌</span></p>
+
         {url &&  <video className={"center"} src={`${url}`} controls={true} autoPlay={true} />}
     </div>;
 }
