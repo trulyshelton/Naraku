@@ -12,6 +12,7 @@ import {
 import { withAuth } from './lib/WithAuth';
 import {PaginateListFiles, GetSignedUrl, GetConfigAndInit, DeleteFile} from './lib/BB2';
 import awsconfig from './aws-config';
+import {BuildTreeFromPaths} from "./lib/Utils";
 
 Amplify.configure(awsconfig);
 
@@ -34,8 +35,10 @@ class App extends React.Component<any, any> {
             let localAllFiles : string[] = [];
             PaginateListFiles("").then(async paginator => {
                 for await (const data of paginator) {
-                    localAllFiles.push(...(data.Contents!.map(x => x.Key as string) ?? []));
+                    localAllFiles.push(...(data.Contents!.map(x => x.Key as string)));
                 }
+                let tree = BuildTreeFromPaths(localAllFiles);
+                console.log(tree);
                 allFiles = localAllFiles;
                 this.setFiles(allFiles);
                 fuse = new Fuse(allFiles, {keys: [], threshold: 0.4, ignoreLocation: true, useExtendedSearch: true})
