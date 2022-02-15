@@ -1,14 +1,14 @@
 
-
-function BuildTreeFromPaths(paths: string[]) {
+function BuildTreeFromObjects(objs: object[]) {
     let result = [];
     let level = {result}
-    paths.forEach(path => {
-        path.split('/').reduce((r, name, i, a) => {
+    objs.forEach(obj => {
+        // @ts-ignore
+        obj.Key.split('/').reduce((r, name, i, a) => {
             if(!r[name]) {
                 r[name] = {result: []};
                 // @ts-ignore
-                r.result.push({name, children: r[name].result})
+                r.result.push(a.length !== i+1 ? {name, children: r[name].result} : {name, ...obj})
             }
 
             return r[name];
@@ -18,4 +18,4 @@ function BuildTreeFromPaths(paths: string[]) {
     return result;
 }
 
-export { BuildTreeFromPaths }
+export { BuildTreeFromObjects }

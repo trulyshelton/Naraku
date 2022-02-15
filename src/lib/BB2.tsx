@@ -16,26 +16,29 @@ async function GetAuthHeader(): Promise<{ Authorization: string }> {
     return {Authorization:idToken};
 }
 
-async function PaginateListFiles(path: string) {
-    // Deprecated code
-    // let result = await fetch(`${ApiGatewayEndpoint}`, {method:'GET', headers: await GetAuthHeader()}).then(res => res.json());
-    return paginateListObjectsV2({ client }, { Bucket: "naraku", Prefix: path });
+async function GetAllFiles(path: string) {
+    await GetConfigAndInit();
+    let result = await fetch(`${ApiGatewayEndpoint}`, {method:'GET', headers: await GetAuthHeader()}).then(res => res.json());
+    return result;
 }
 
 async function GetSignedUrl(key: string) {
+    await GetConfigAndInit();
     let command = new GetObjectCommand({Bucket:'naraku', Key:key});
     let url = await getSignedUrl(client, command, { expiresIn: 7200 });
     return url;
 }
 
 async function DeleteFile(key: string) {
+    await GetConfigAndInit();
     let command = new DeleteObjectCommand({Bucket:'naraku', Key:key});
     await client.send(command);
 }
 
 async function GetConfigAndInit() {
+    if (client) return;
     let result = await fetch(`${ApiGatewayEndpoint}/config`, {method:'GET', headers: await GetAuthHeader()}).then(res => res.json());
     client = new S3Client(result);
 }
 
-export { PaginateListFiles, GetSignedUrl, GetConfigAndInit, DeleteFile };
+export { GetSignedUrl, GetConfigAndInit, DeleteFile, GetAllFiles };

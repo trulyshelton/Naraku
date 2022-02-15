@@ -2,122 +2,45 @@ import React, {useEffect, useState} from 'react';
 import './App.css';
 import Amplify from 'aws-amplify';
 import Fuse from 'fuse.js';
+import { useDebounce } from 'use-debounce';
 import {
     BrowserRouter as Router,
-    Switch,
     Route,
-    Link,
+    Routes,
     useParams
 } from "react-router-dom";
 import { withAuth } from './lib/WithAuth';
-import {PaginateListFiles, GetSignedUrl, GetConfigAndInit, DeleteFile} from './lib/BB2';
+import {GetSignedUrl, DeleteFile, GetAllFiles} from './lib/BB2';
 import awsconfig from './aws-config';
-import {BuildTreeFromPaths} from "./lib/Utils";
+import TreeView from '@mui/lab/TreeView';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import TreeItem  from '@mui/lab/TreeItem';
+import {BuildTreeFromObjects} from "./lib/Utils";
+import {Box, TextField} from "@mui/material";
 
 Amplify.configure(awsconfig);
-
-let allFiles : string[] = JSON.parse(localStorage.getItem("allFiles") || '[]');
-let fuse = new Fuse(allFiles, {keys: [], threshold: 0.4, ignoreLocation: true, useExtendedSearch: true});
 
 class App extends React.Component<any, any> {
     constructor(props) {
         super(props);
-        this.state = {files: allFiles};
-        this.setFiles = this.setFiles.bind(this)
     }
-
-    setFiles(files) {
-        this.setState({files:files});
-    }
-
-    componentDidMount() {
-        GetConfigAndInit().then(() => {
-            let localAllFiles : string[] = [];
-            PaginateListFiles("").then(async paginator => {
-                for await (const data of paginator) {
-                    localAllFiles.push(...(data.Contents!.map(x => x.Key as string)));
-                }
-                let tree = BuildTreeFromPaths(localAllFiles);
-                console.log(tree);
-                allFiles = localAllFiles;
-                this.setFiles(allFiles);
-                fuse = new Fuse(allFiles, {keys: [], threshold: 0.4, ignoreLocation: true, useExtendedSearch: true})
-                localStorage.setItem("allFiles", JSON.stringify(allFiles))
-                console.log("Load all files complete.");
-                this.setState({...this.state, loaded: true});
-            }).catch(err => {
-                console.error(err);
-                this.setState({error: err});
-            });
-        }).catch(err => {
-            console.error(err);
-            this.setState({error: err});
-        })
-    }
-
 
     render() {
         return (
             <Router>
-                <div>
-                    <Switch>
-                        <Route path={`/:fileKey+/view`}>
-                            <File />
-                        </Route>
-                        <Route path="/:path*">
-                            <SearchBar setFiles={this.setFiles} state={this.state}/>
-                            <Explorer state={this.state}/>
-                        </Route>
-                    </Switch>
-                </div>
+                <Routes>
+                    <Route path="/" element={<Explorer/>} />
+                    <Route path="/view/*" element={<File/>} />
+                </Routes>
             </Router>
         );
     }
 }
 
-function Explorer({state}) {
-    let { path } = useParams();
-
-    let root = path === undefined ? "" : "/";
-    path = path || "";
-    console.log(`Exploring path ${path}`);
-
-    let folderSet = new Set(), topLevelFiles: string[] = [];
-    for (let i = 0; i < state.files.length; i++) {
-        let file = state.files[i]
-        if (file.startsWith(path)) {
-            file = file.substring(path.length);
-            file = file.startsWith("/") ? file.substring(1) : file;
-            let splits = file.split("/");
-            if (splits.length > 1) {
-                folderSet.add(splits[0])
-            } else {
-                topLevelFiles.push(file);
-            }
-        }
-    }
-
-    return (
-        <ul>
-            {path && <li key={".."}>
-                <Link to={"../"}>../</Link>
-            </li>}
-            {(Array.from(folderSet) as string[]).map(folder => (
-                <li key={folder}>
-                    <Link to={`${root + encodeURI(path + "/" + folder)}/`}>{folder}/</Link>
-                </li>
-            ))}
-            {topLevelFiles.map(item => (
-                <li key={item}>
-                    <Link to={`${root + encodeURI(path + "/" + item)}/view`}>{item}</Link>
-                </li>
-            ))}
-        </ul>
-    );
-}
-
 function File() {
-    let { fileKey } = useParams();
+    let fileKey = useParams()['*']!;
+    console.log(useParams())
     const [url, updateUrl] = useState("");
     useEffect(() => {GetSignedUrl(fileKey).then(res => updateUrl(res));});
     let deleteOnClick = () => {
@@ -133,31 +56,86 @@ function File() {
     }
     return <div>
         <p style={{textAlign:"center"}}>{(fileKey).split("/").pop()} <span onClick={deleteOnClick}>❌</span></p>
-
         {url &&  <video className={"center"} src={`${url}`} controls={true} autoPlay={true} />}
     </div>;
 }
 
-function SearchBar({setFiles, state}) {
-    const handleChange = (e) => {
-        e.preventDefault();
-        if (e.target.value.length > 0) {
-            setFiles(fuse.search(e.target.value).map(x => x.item));
-        } else {
-            setFiles(allFiles)
-        }
-    };
+class Explorer extends React.Component<any, any> {
+    constructor(props) {
+        super(props);
+        this.state = {files: [], fuse: null, search: ''};
+    }
 
-    let placeholderText = "Loading...";
-    if (state.loaded) placeholderText = "Search here";
-    if (state.error) placeholderText = state.error.toString();
-    return <div>
-        <textarea
-            className={"center"}
-            placeholder={placeholderText}
-            onChange={handleChange} />
-    </div>
+    async componentDidMount() {
+        try {
+            let allFiles = await GetAllFiles("");
+            console.log(allFiles);
+            let fuse = new Fuse(allFiles, {keys: ['Key'], threshold: 0.3, ignoreLocation: true, useExtendedSearch: true})
+            this.setState({files: allFiles, fuse: fuse, search: ''});
+            console.log("Load all files complete.");
+        } catch (err) {
+            console.error(err);
+            this.setState({...this.state, error: err});
+        }
+    }
+
+    render() {
+        let results = this.state.fuse && this.state.search ? this.state.fuse.search(this.state.search).map(x => x.item) : this.state.files;
+        let treeData = BuildTreeFromObjects(results);
+        console.log(treeData);
+
+        return <>
+           <SearchBar setSearch={(value) => {
+               this.setState({...this.state, search: value})
+           }} state={this.state}/>
+            <RichObjectTreeView data={treeData}/>
+        </>
+    }
 }
 
+function SearchBar({setSearch, state}) {
+    const [text, setText] = useState('');
+    const [value] = useDebounce(text, 600);
+
+    useEffect(() => setSearch(value), [value]);
+    let placeholder = state.fuse ? (state.error ? state.error.toString() : "Search here") : "Loading...";
+
+    return <Box display="flex"
+                justifyContent="center"
+                alignItems="center">
+        <TextField
+                placeholder={placeholder}
+                disabled={placeholder !== "Search here"}
+                onChange={(e) => setText(e.target.value)}
+                sx={{width: "50%"}}
+                />
+        </Box>
+}
+
+function RichObjectTreeView({data}) {
+    const onClick = (e) => {
+        let fileKey = e.target.closest("li").dataset.key;
+        if (fileKey) window.open(document.location.href + 'view/' + encodeURI(fileKey), '_blank');
+    }
+    const renderTree = (nodes) => (
+        <TreeItem key={nodes.name} nodeId={nodes.name} label={nodes.name} data-key={nodes.Key} onClick={onClick} >
+            {Array.isArray(nodes.children)
+                ? nodes.children.map((node) => renderTree(node))
+                : null}
+        </TreeItem>
+    );
+
+    return (
+        <TreeView
+            aria-label="rich object"
+            defaultCollapseIcon={<ExpandMoreIcon />}
+            defaultExpanded={['root']}
+            defaultExpandIcon={<ChevronRightIcon />}
+            sx={{ height: '80%', flexGrow: 1, maxWidth: '80%', overflowY: 'auto', mx: "auto" }}
+        >
+            {data.map(node => renderTree(node))}
+        </TreeView>
+    );
+}
 export default withAuth(App);
 
