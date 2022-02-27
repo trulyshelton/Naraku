@@ -14,7 +14,6 @@ function BuildTreeFromObjects(objs: object[]) {
             return r[name];
         }, level)
     })
-
     return result;
 }
 

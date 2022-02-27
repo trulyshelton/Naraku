@@ -3,7 +3,7 @@ import React, {
     FunctionComponent,
 } from 'react';
 import { Auth, appendToCognitoUserAgent } from '@aws-amplify/auth';
-import { AmplifyContainer, AmplifyAuthenticator, AmplifyAuthContainer, AmplifySignIn, AmplifySignOut } from '@aws-amplify/ui-react';
+import { AmplifyContainer, AmplifyAuthenticator, AmplifyAuthContainer, AmplifySignIn } from '@aws-amplify/ui-react';
 import { onAuthUIStateChange, AuthState } from '@aws-amplify/ui-components';
 import { Logger } from '@aws-amplify/core';
 
